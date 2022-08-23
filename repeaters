@@ -6,22 +6,31 @@ from pandas.api.types import CategoricalDtype
 from geographiclib.geodesic import Geodesic
 
 #
-# Thanks to N4VGQ
+# Thanks to N5VGQ - James Rogers. I'm also having fun with hams in my old age.
 #
-# Instructins:
 # Start with a CSV export of your state's repeaters by going to
-# https://repeaterbook.com/repeaters/index.php?state_id=none
+# https://repeaterbook.com/repeaters/index.php?state_id=<state#>
+# My ID is 40. RepeaterBook uses the USDA state code list.  
+#   https://www.nrcs.usda.gov/wps/portal/nrcs/detail/?cid=nrcs143_013696
+#
+# W5TSU - Mark Grennan
 
+debug = True
+
+#
+# This section is for USER INPUT
+#
 # Look up you Lat/Lon on map.google.com
 home = [35.5325972,-97.6222674]
 w5tsu = [35.5325972,-97.6222674]
-#n5vgq = [32.40527778, -94.72027778]
 
 # Select the center of you search
 center = home
 
 # What file do you want the output to go to?
+input_file = "~/Downloads/repeaterbook_repeaters_.csv"
 output_file = "~/Desktop/repeaters.csv"
+gd88_output_file = "~/Desktop/gd-88-repeaters.csv"
 
 # what frequency ranges do you want included?
 included_frequencies = [[144,148], [420,450]]
@@ -29,56 +38,64 @@ included_frequencies = [[144,148], [420,450]]
 # What Modes do you want to exclude?
 excluded_modes=['P25','EchoLink', 'IRLP','NXDN','Fusion','DSTAR', 'DMR']
 
-
-# Define your local counties for priority.
-district_6 = [
-    'Gregg',
-    'Upshur',
-    'Rusk',
-    'Smith',
-    'Camp',
-    'Marion',
-    'Harrison',
-    'Panola',
-    'Shelby',
-    'Nacogdoches',
-    'Cherokee',
-    'Anderson',
-    'Henderson',
-    'Van Zandt',
-    'Rains',
-    'Wood',
-    ]
-    
-district_4 = [
-	'Denton',
-	'Tarrant',
-	'Johnson',
-	'Somervell',
-	'Hood',
-	'Erath',
-	'Palo Pinto',
-	'Parker',
-	'Wise',
-	'Dallas',
-	'Collin',
-	'Rockwall',
-	'Hunt',
-	'Kaufman',
-	'Navarro',
-	'Ellis',
-	]
-
 # Select your local counties
-local_counties = district_6
+local_counties = [
+    'Oklahoma',
+    'Cleveland',
+    'pottawatomie',
+    'Lincoln',
+    'Logan',
+    'Kingfisher',
+    'Canadian',
+    'Grady',
+    'McClain'
+    ]
 
 county_categories = CategoricalDtype(local_counties, ordered=True)
 
 priorityScan_counties = [
-    'Gregg',
-    'Rusk',
-    'Upshur',
+    'Oklahoma',
+    'Cleveland',
+    'Canadian',
+    'Grady'
     ]
+
+# 
+# This secuion defines the tables we will use.
+#
+# Sample "analog.csv" file for GD-88
+#  Z-1,CH mode,CH Name,RX Freq,TX Freq,Power,RX Only,Alarm ACK,Prompt,PCT,RX TS,TX TS,RX CC,TX CC,Msg Type,TX Policy,RX Group,Encryption List,Scan List,Contacts,EAS,Relay Monitor,Relay mode,Bandwidth,RX QT/DQT,TX QT/DQT,APRS
+#  1,Analog,146.850,146.85000,146.25000,High,Off,On,On,Patcs,Slot 1,Slot 1,1,1,Unconfirmed Data,Impolite,RX all,Off,Off,Parrot,Off,Off,Off,25,Off,141.3,Off
+
+odf = pd.DataFrame( { 
+#    'Channel':[],
+    'CH mode':[],
+    'CH Name':[],
+    'RX Freq':[],
+    'TX Freq':[],
+    'Power':[],
+    'RX Only':[],
+    'Alarm ACK':[],
+    'Prompt':[],
+    'PCT':[],
+    'RX TS':[],
+    'TX TS':[],
+    'RX CC':[],
+    'TX CC':[],
+    'Msg Type':[],
+    'TX Policy':[],
+    'RX Group':[],
+    'Encryption List':[],
+    'Scan List':[],
+    'Contacts':[],
+    'EAS':[],
+    'Relay Monitor':[],
+    'Relay mode':[],
+    'Bandwidth':[],
+    'RX QT/DQT':[],
+    'TX QT/DQT':[],
+    'APRS':[]
+    } )
 
 desired_columns = [
     'Output Freq',
@@ -96,24 +113,32 @@ desired_columns = [
     'PriorityScan',
     ]
 
-# First we'll read in the statewide repeater list.
-df = pd.read_csv('~/Downloads/repeaterbook_repeaters_.csv')
+# Read in the statewide repeater list into a dataFrame (df).
+#       Output Freq  Input Freq Offset Uplink Tone Downlink Tone        Location     County        Lat       Long  ...   Use Op Status           Mode Digital Access  EchoLink  IRLP  AllStar  Coverage Last Update
+#  0        52.8100     51.8100      -       131.8           NaN         Buffalo     Harper  36.835602 -99.630402  ...  OPEN   Unknown  Analog/analog            NaN       NaN   NaN      NaN       NaN  2022-05-23
 
-# Next we'll reduce the dataFrame down to rows just in the desired counties.
+df = pd.read_csv(input_file)
+
+if debug: 
+    print("Input table")
+    print(df)
+    print("Output table")
+    print(odf)
+
+# Reduce the dataFrame down to rows just in the desired counties.
 #df = df[df['County'].isin(local_counties)]
 
-# We'll also throw out any rows with excluded radio modes.
+# Throw out excluded modes.
 df = df[~df['Mode'].isin(excluded_modes)]
 
-# And we'll set a column called 'PriorityScan' based on the counties we don't want to miss scanning.
+# Set a column called 'PriorityScan' based on the counties we don't want to miss scanning.
 df['PriorityScan'] = df['County'].isin(priorityScan_counties)
 
-# Now we'll limit the dataFrame down to just frequencies in the target ranges
+# Limit the dataFrame down to target frequency ranges
 df = df[( (df['Output Freq'] > included_frequencies[0][0]) & (df['Output Freq'] < included_frequencies[0][1])) | 
     	( (df['Output Freq'] > included_frequencies[1][0]) & (df['Output Freq'] < included_frequencies[1][1])) ]
 
-
-# Now we'll calculate the distances and bearings from the designated "center" using the row's Long and Lat.
+# Calculate the distances and bearings from the designated "center" using the row's Long and Lat.
 distances = []
 bearings = []
 for i, j in zip(df['Lat'], df['Long']):
@@ -125,15 +150,47 @@ for i, j in zip(df['Lat'], df['Long']):
 df['Distance'] = distances
 df['Bearing'] = bearings
 
-# Now we'll re-sort by the Counties in a categorical list created from the ordered list above.
+# Sort by the Counties in a categorical list created from the ordered list above.
 df['CountyForSort'] = df['County'].astype(county_categories)
 df.sort_values(['CountyForSort', 'Long'], inplace=True)
 
-# Now we generate a list of channel numbers and use them as the DataFrame's index.
+# Generate a list of channel numbers and use them as the DataFrame's index.
 df['Channel'] = list(range(len(df.index))) 
 df['Channel'] = df['Channel'] + 1
 df = df.set_index(['Channel'])
 
-# Now write out the new file.
+# Copy stuff to GD-88
+#odf[''] = df['']
+
+odf['CH Name'] = df['Call']
+odf['CH mode'] = "Analog"
+odf['RX Freq'] = df['Output Freq']
+odf['TX Freq'] = df['Input Freq']
+odf['Power'] = "High"
+odf['RX Only'] = "Off"
+odf['Alarm ACK'] = "On"
+odf['Prompt'] = "On"
+odf['PCT'] = "Patcs"
+odf['RX TS'] = "Slot 1"
+odf['TX TS'] = "Slot 1"
+odf['RX CC'] = "1"
+odf['TX CC'] = "1"
+odf['Msg Type'] = "Unconfirmed Data"
+odf['TX Policy'] = "Impolite"
+odf['RX Group'] = "RX only"
+odf['Encryption List'] = "Off"
+odf['Scan List'] = "Off"
+odf['Contacts'] = "Parrot"
+odf['EAS'] = "Off"
+odf['Relay Monitor'] = "Off"
+odf['Relay mode'] = "25"
+odf['Bandwidth'] = "Off"
+odf['RX QT/DQT'] = df['Uplink Tone']
+odf['TX QT/DQT'] = df['Uplink Tone']
+odf['APRS'] = "Off"
+
+# Write out the new file.
 df.to_csv(output_file, columns=desired_columns)
+odf.to_csv(gd88_output_file)
+
 
