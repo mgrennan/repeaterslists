@@ -5,18 +5,32 @@ from geopy import distance
 from pandas.api.types import CategoricalDtype
 from geographiclib.geodesic import Geodesic
 
-kspc = [32.38354167, -94.87277778]
-#home = [32.38318056, -94.84388889]
+#
+# Thanks to N4VGQ
+#
+# Instructins:
+# Start with a CSV export of your state's repeaters by going to
+# https://repeaterbook.com/repeaters/index.php?state_id=none
+
+# Look up you Lat/Lon on map.google.com
+home = [35.5325972,-97.6222674]
+w5tsu = [35.5325972,-97.6222674]
 #n5vgq = [32.40527778, -94.72027778]
-#longview_mall  = [32.54133056, -94.75416667]
-#longview_courthouse = [32.49678056, -94.73861111]
-#henderson_water_tower = [32.15377778, -94.80083333]
-#mims_chapel_vfd = [32.798347,-94.568262]
 
-center = kspc
+# Select the center of you search
+center = home
 
-included_frequencies = [[144,148], [420,450], [28,30], [50,54]]
+# What file do you want the output to go to?
+output_file = "~/Desktop/repeaters.csv"
 
+# what frequency ranges do you want included?
+included_frequencies = [[144,148], [420,450]]
+
+# What Modes do you want to exclude?
+excluded_modes=['P25','EchoLink', 'IRLP','NXDN','Fusion','DSTAR', 'DMR']
+
+
+# Define your local counties for priority.
 district_6 = [
     'Gregg',
     'Upshur',
@@ -55,6 +69,7 @@ district_4 = [
 	'Ellis',
 	]
 
+# Select your local counties
 local_counties = district_6
 
 county_categories = CategoricalDtype(local_counties, ordered=True)
@@ -64,8 +79,6 @@ priorityScan_counties = [
     'Rusk',
     'Upshur',
     ]
-
-excluded_modes=['DStar', 'DMR']
 
 desired_columns = [
     'Output Freq',
@@ -83,31 +96,28 @@ desired_columns = [
     'PriorityScan',
     ]
 
-
 # First we'll read in the statewide repeater list.
-
 df = pd.read_csv('~/Downloads/repeaterbook_repeaters_.csv')
 
 # Next we'll reduce the dataFrame down to rows just in the desired counties.
-# We'll also throw out any rows with excluded radio modes.
-# And we'll set a column called 'PriorityScan' based on the counties we don't want to miss scanning.
+#df = df[df['County'].isin(local_counties)]
 
-df = df[df['County'].isin(local_counties)]
+# We'll also throw out any rows with excluded radio modes.
 df = df[~df['Mode'].isin(excluded_modes)]
+
+# And we'll set a column called 'PriorityScan' based on the counties we don't want to miss scanning.
 df['PriorityScan'] = df['County'].isin(priorityScan_counties)
 
 # Now we'll limit the dataFrame down to just frequencies in the target ranges
-
 df = df[( (df['Output Freq'] > included_frequencies[0][0]) & (df['Output Freq'] < included_frequencies[0][1])) | 
     	( (df['Output Freq'] > included_frequencies[1][0]) & (df['Output Freq'] < included_frequencies[1][1])) ]
 
 
 # Now we'll calculate the distances and bearings from the designated "center" using the row's Long and Lat.
-
 distances = []
 bearings = []
 for i, j in zip(df['Lat'], df['Long']):
-    distances.append(round(distance.distance([i, j], center).miles, 2))
+    distances.append(round(distance.distance([i, j], center).miles, 200))
     bearing = Geodesic.WGS84.Inverse(center[0], center[1], i, j)['azi1']
     if bearing < 0:
         bearing = bearing + 360
@@ -116,15 +126,14 @@ df['Distance'] = distances
 df['Bearing'] = bearings
 
 # Now we'll re-sort by the Counties in a categorical list created from the ordered list above.
-
 df['CountyForSort'] = df['County'].astype(county_categories)
 df.sort_values(['CountyForSort', 'Long'], inplace=True)
 
 # Now we generate a list of channel numbers and use them as the DataFrame's index.
-
 df['Channel'] = list(range(len(df.index))) 
 df['Channel'] = df['Channel'] + 1
 df = df.set_index(['Channel'])
 
-df.to_csv('~/Desktop/District6.csv', columns=desired_columns)
+# Now write out the new file.
+df.to_csv(output_file, columns=desired_columns)
 
