@@ -15,7 +15,7 @@ from geographiclib.geodesic import Geodesic
 #
 # W5TSU - Mark Grennan
 
-debug = True
+debug = False
 
 #
 # This section is for USER INPUT
@@ -193,4 +193,10 @@ odf['APRS'] = "Off"
 df.to_csv(output_file, columns=desired_columns)
 odf.to_csv(gd88_output_file)
 
-
+if debug: 
+    print("Output table")
+    print(df)
+    print("GD-88 outputtable")
+    print(odf)
+else: 
+    print("GD-88 file written to: "+gd88_output_file)
