@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-
-import pandas as pd
-from geopy import distance
-from pandas.api.types import CategoricalDtype
-from geographiclib.geodesic import Geodesic
-
 #
 # Thanks to N5VGQ - James Rogers. I'm also having fun with hams in my old age.
 #
@@ -14,6 +8,11 @@ from geographiclib.geodesic import Geodesic
 #   https://www.nrcs.usda.gov/wps/portal/nrcs/detail/?cid=nrcs143_013696
 #
 # W5TSU - Mark Grennan
+
+import pandas as pd
+from geopy import distance
+from pandas.api.types import CategoricalDtype
+from geographiclib.geodesic import Geodesic
 
 debug = False
 
@@ -26,6 +25,9 @@ w5tsu = [35.5325972,-97.6222674]
 
 # Select the center of you search
 center = home
+
+# Range of signals
+rang = 50
 
 # What file do you want the output to go to?
 input_file = "~/Downloads/repeaterbook_repeaters_.csv"
@@ -68,7 +70,6 @@ priorityScan_counties = [
 #  1,Analog,146.850,146.85000,146.25000,High,Off,On,On,Patcs,Slot 1,Slot 1,1,1,Unconfirmed Data,Impolite,RX all,Off,Off,Parrot,Off,Off,Off,25,Off,141.3,Off
 
 odf = pd.DataFrame( { 
-#    'Channel':[],
     'CH mode':[],
     'CH Name':[],
     'RX Freq':[],
@@ -142,26 +143,32 @@ df = df[( (df['Output Freq'] > included_frequencies[0][0]) & (df['Output Freq'] 
 distances = []
 bearings = []
 for i, j in zip(df['Lat'], df['Long']):
-    distances.append(round(distance.distance([i, j], center).miles, 200))
+    distances.append(round(distance.distance([i, j], center).miles, rang))
+
     bearing = Geodesic.WGS84.Inverse(center[0], center[1], i, j)['azi1']
     if bearing < 0:
         bearing = bearing + 360
     bearings.append(round(bearing, 1))
+
 df['Distance'] = distances
 df['Bearing'] = bearings
 
+# Delete rows where the distance is > then our Range (rang)
+df.drop(df.index[df['Distance'] > rang], inplace=True)
+
 # Sort by the Counties in a categorical list created from the ordered list above.
-df['CountyForSort'] = df['County'].astype(county_categories)
-df.sort_values(['CountyForSort', 'Long'], inplace=True)
+#df['CountyForSort'] = df['County'].astype(county_categories)
+#df.sort_values(['CountyForSort', 'Long'], inplace=True)
+
+# Sort by Distance from center (Home)
+df.sort_values(by=['Distance'])
 
 # Generate a list of channel numbers and use them as the DataFrame's index.
 df['Channel'] = list(range(len(df.index))) 
 df['Channel'] = df['Channel'] + 1
 df = df.set_index(['Channel'])
 
-# Copy stuff to GD-88
-#odf[''] = df['']
-
+# Copy rows to GD-88
 odf['CH Name'] = df['Call']
 odf['CH mode'] = "Analog"
 odf['RX Freq'] = df['Output Freq']
@@ -185,18 +192,19 @@ odf['EAS'] = "Off"
 odf['Relay Monitor'] = "Off"
 odf['Relay mode'] = "25"
 odf['Bandwidth'] = "Off"
-odf['RX QT/DQT'] = df['Uplink Tone']
+odf['RX QT/DQT'] = "Off"
 odf['TX QT/DQT'] = df['Uplink Tone']
 odf['APRS'] = "Off"
 
 # Write out the new file.
-df.to_csv(output_file, columns=desired_columns)
+#df.to_csv(output_file, columns=desired_columns)
 odf.to_csv(gd88_output_file)
 
 if debug: 
-    print("Output table")
+    print("Output table "+output_file)
     print(df)
-    print("GD-88 outputtable")
+    print("GD-88 outputtable "+gd88_output_file)
     print(odf)
 else: 
+    print("Default file written to: "+output_file)
     print("GD-88 file written to: "+gd88_output_file)
